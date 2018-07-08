@@ -4,10 +4,13 @@ from requests.exceptions import ConnectionError, InvalidSchema
 from pyquery import PyQuery as pq
 from pymongo import MongoClient
 import re
+import time
+import asyncio
+import aiohttp
 
 CLIENT = MongoClient()
 DB = CLIENT['weixin']
-collection = DB['articels']
+collection = DB['articels2']
 PROXY_POOL_URL = 'http://localhost:5555/random'
 REQUEST_URL = 'http://weixin.sogou.com/weixin?'
 headers = {
@@ -96,7 +99,7 @@ def parse_detail(url):
         return data
 
 
-def save_to_mongo(data):
+async def save_to_mongo(data):
     condition = {'title': data['title']}
     if collection.find_one(condition):
         if collection.update_one(condition, {'$set': data}):
@@ -111,15 +114,21 @@ def save_to_mongo(data):
 
 
 if __name__ == '__main__':
+    start = time.time()
     print('Start……')
     i = 1
+    tasks = []
     while True:
-        html = get_index('泫雅', '2', i)
+        html = get_index('东明大洋福邸二手房', '2', i)
         for url in get_url(html.get('html')):
             data = parse_detail(url[0])
-            # print(data)
-            save_to_mongo(data)
+            task = asyncio.ensure_future(save_to_mongo(data))
+            tasks.append(task)
+        print("第", i, '页')
         if html['flag']:
             i = i + 1
         else:
             break
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(asyncio.wait(tasks))
+    print("总用时", time.time() - start)
